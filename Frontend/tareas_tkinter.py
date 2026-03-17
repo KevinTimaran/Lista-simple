@@ -3,125 +3,287 @@ from tkinter import messagebox
 from pathlib import Path
 import sys
 
-RUTA_PROYECTO = Path(__file__).resolve().parent.parent
-if str(RUTA_PROYECTO) not in sys.path:
-    sys.path.insert(0, str(RUTA_PROYECTO))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from Backend.logica_tareas import ListaEnlazadaTareas
+from Backend.logica_tareas import TaskLinkedList
 
 
-class AppTareasTkinter:
+class TaskAppTkinter:
     def __init__(self, root):
         self.root = root
-        self.root.title("Lista de Tareas - Lista Enlazada")
-        self.root.geometry("580x420")
+        self.root.title("Task List - Linked List")
+        self.root.geometry("1080x680")
         self.root.resizable(False, False)
 
-        self.lista_tareas = ListaEnlazadaTareas()
+        self.task_list = TaskLinkedList()
+        self.selected_task_id = None
+        self.detail_panel_width = 360
+        self.is_detail_panel_visible = False
+        self.is_detail_panel_animating = False
 
-        self._crear_interfaz()
-        self._refrescar_pantalla()
+        self._create_interface()
+        self._refresh_screen()
 
-    def _crear_interfaz(self):
-        titulo = tk.Label(
+    def _create_interface(self):
+        title = tk.Label(
             self.root,
-            text="Taller: Lista de Tareas con Lista Enlazada",
+            text="Workshop: Task List with Linked List",
             font=("Arial", 13, "bold"),
             pady=10,
         )
-        titulo.pack()
+        title.pack()
 
-        frame_agregar = tk.Frame(self.root)
-        frame_agregar.pack(pady=8)
+        add_frame = tk.Frame(self.root)
+        add_frame.pack(pady=8, fill=tk.X, padx=16)
 
-        tk.Label(frame_agregar, text="Nueva tarea:", font=("Arial", 10)).grid(row=0, column=0, padx=5)
+        tk.Label(add_frame, text="New task:", font=("Arial", 10)).grid(row=0, column=0, padx=5)
 
-        self.entrada_tarea = tk.Entry(frame_agregar, width=38, font=("Arial", 10))
-        self.entrada_tarea.grid(row=0, column=1, padx=5)
+        self.task_input = tk.Entry(add_frame, width=52, font=("Arial", 10))
+        self.task_input.grid(row=0, column=1, padx=5)
 
-        btn_agregar = tk.Button(
-            frame_agregar,
-            text="Agregar",
-            command=self._agregar_tarea_desde_ui,
+        add_button = tk.Button(
+            add_frame,
+            text="Add",
+            command=self._add_task_from_ui,
             width=12,
             bg="#2e7d32",
             fg="white",
         )
-        btn_agregar.grid(row=0, column=2, padx=5)
+        add_button.grid(row=0, column=2, padx=5)
 
-        frame_marcar = tk.Frame(self.root)
-        frame_marcar.pack(pady=8)
+        self.total_label = tk.Label(self.root, text="Total tasks: 0", font=("Arial", 10, "bold"))
+        self.total_label.pack(pady=6)
 
-        tk.Label(frame_marcar, text="ID a completar:", font=("Arial", 10)).grid(row=0, column=0, padx=5)
+        self.main_frame = tk.Frame(self.root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=8)
 
-        self.entrada_id = tk.Entry(frame_marcar, width=10, font=("Arial", 10))
-        self.entrada_id.grid(row=0, column=1, padx=5)
+        left_panel = tk.Frame(self.main_frame, bd=1, relief=tk.GROOVE)
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        btn_marcar = tk.Button(
-            frame_marcar,
-            text="Marcar completada",
-            command=self._marcar_tarea_desde_ui,
-            width=16,
-            bg="#1565c0",
-            fg="white",
+        tk.Label(left_panel, text="Tasks", font=("Arial", 11, "bold")).pack(pady=8)
+
+        self.tasks_canvas = tk.Canvas(left_panel, highlightthickness=0)
+        self.tasks_scrollbar = tk.Scrollbar(left_panel, orient=tk.VERTICAL, command=self.tasks_canvas.yview)
+        self.tasks_container = tk.Frame(self.tasks_canvas)
+
+        self.tasks_container.bind(
+            "<Configure>",
+            lambda event: self.tasks_canvas.configure(scrollregion=self.tasks_canvas.bbox("all")),
         )
-        btn_marcar.grid(row=0, column=2, padx=5)
+        self.tasks_canvas.create_window((0, 0), window=self.tasks_container, anchor="nw")
+        self.tasks_canvas.configure(yscrollcommand=self.tasks_scrollbar.set)
 
-        self.label_total = tk.Label(self.root, text="Total de tareas: 0", font=("Arial", 10, "bold"))
-        self.label_total.pack(pady=8)
+        self.tasks_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=(0, 8))
+        self.tasks_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 8), pady=(0, 8))
 
-        self.area_tareas = tk.Text(self.root, width=68, height=14, font=("Consolas", 10))
-        self.area_tareas.pack(padx=12, pady=8)
-        self.area_tareas.config(state=tk.DISABLED)
+        self.detail_panel = tk.Frame(self.main_frame, width=self.detail_panel_width, bd=1, relief=tk.GROOVE)
+        self.detail_panel.pack_propagate(False)
 
-        nota = tk.Label(
+        tk.Label(self.detail_panel, text="Task detail", font=("Arial", 11, "bold")).pack(pady=(10, 4))
+        self.current_task_label = tk.Label(
+            self.detail_panel,
+            text="Select a task with the Details button",
+            wraplength=320,
+            justify=tk.LEFT,
+            fg="#1f2937",
+        )
+        self.current_task_label.pack(padx=12, pady=(4, 10), anchor="w")
+
+        tk.Label(self.detail_panel, text="Extra note:", font=("Arial", 10)).pack(padx=12, anchor="w")
+
+        self.note_text = tk.Text(self.detail_panel, width=38, height=20, font=("Arial", 10))
+        self.note_text.pack(padx=12, pady=(6, 10), fill=tk.BOTH, expand=True)
+
+        self.save_note_button = tk.Button(
+            self.detail_panel,
+            text="Save note",
+            command=self._save_note_from_ui,
+            state=tk.DISABLED,
+            bg="#6d28d9",
+            fg="white",
+            width=16,
+        )
+        self.save_note_button.pack(pady=(0, 10))
+
+        self.main_frame.update_idletasks()
+        self.detail_panel.place(x=self._get_hidden_panel_x(), y=0, width=self.detail_panel_width, relheight=1.0)
+
+        note = tk.Label(
             self.root,
-            text="Nota: por requerimiento del taller, no se incluye funcion para eliminar tareas.",
+            text="Note: by workshop requirement, task deletion is not included.",
             fg="#555555",
             font=("Arial", 9),
         )
-        nota.pack(pady=4)
+        note.pack(pady=(0, 8))
 
-    def _agregar_tarea_desde_ui(self):
-        descripcion = self.entrada_tarea.get().strip()
+    def _add_task_from_ui(self):
+        description = self.task_input.get().strip()
 
-        if descripcion == "":
-            messagebox.showwarning("Dato invalido", "Debes escribir una descripcion.")
+        if description == "":
+            messagebox.showwarning("Invalid data", "You must write a description.")
             return
 
-        self.lista_tareas.agregar_tarea(descripcion)
-        self.entrada_tarea.delete(0, tk.END)
-        self._refrescar_pantalla()
+        self.task_list.add_task(description)
+        self.task_input.delete(0, tk.END)
+        self.selected_task_id = None
+        self._refresh_screen()
 
-    def _marcar_tarea_desde_ui(self):
-        valor_id = self.entrada_id.get().strip()
+    def _get_visible_panel_x(self):
+        return max(0, self.main_frame.winfo_width() - self.detail_panel_width)
 
-        if valor_id == "" or not valor_id.isdigit():
-            messagebox.showwarning("Dato invalido", "Debes escribir un ID numerico.")
+    def _get_hidden_panel_x(self):
+        return self.main_frame.winfo_width() + 20
+
+    def _animate_panel(self, target_x):
+        if self.is_detail_panel_animating:
             return
 
-        identificador = int(valor_id)
-        encontrada = self.lista_tareas.marcar_completada(identificador)
+        self.is_detail_panel_animating = True
 
-        if not encontrada:
-            messagebox.showinfo("No encontrada", "No existe una tarea con ese ID.")
+        def step():
+            current_x = self.detail_panel.winfo_x()
+            difference = target_x - current_x
 
-        self.entrada_id.delete(0, tk.END)
-        self._refrescar_pantalla()
+            if abs(difference) <= 14:
+                self.detail_panel.place_configure(x=target_x)
+                self.is_detail_panel_animating = False
+                return
 
-    def _refrescar_pantalla(self):
-        self.label_total.config(text=f"Total de tareas: {self.lista_tareas.tamano}")
+            step_size = 14 if difference > 0 else -14
+            self.detail_panel.place_configure(x=current_x + step_size)
+            self.root.after(8, step)
 
-        texto = self.lista_tareas.construir_texto_tareas()
-        self.area_tareas.config(state=tk.NORMAL)
-        self.area_tareas.delete("1.0", tk.END)
-        self.area_tareas.insert(tk.END, texto)
-        self.area_tareas.config(state=tk.DISABLED)
+        step()
+
+    def _show_detail_panel(self):
+        self.is_detail_panel_visible = True
+        self._animate_panel(self._get_visible_panel_x())
+
+    def _hide_detail_panel(self):
+        self.is_detail_panel_visible = False
+        self._animate_panel(self._get_hidden_panel_x())
+
+    def _clear_detail_panel(self):
+        self.current_task_label.config(text="Select a task with the Details button")
+        self.note_text.delete("1.0", tk.END)
+        self.save_note_button.config(state=tk.DISABLED)
+
+    def _mark_task_from_ui(self, task_id):
+        found = self.task_list.mark_completed(task_id)
+
+        if not found:
+            messagebox.showinfo("Not found", "There is no task with that ID.")
+
+        self._refresh_screen()
+
+    def _open_detail_panel(self, task_id):
+        task = self.task_list.find_task(task_id)
+
+        if task is None:
+            messagebox.showinfo("Not found", "There is no task with that ID.")
+            return
+
+        self.selected_task_id = task_id
+        status = "Completed" if task.completed else "Pending"
+        self.current_task_label.config(text=f"ID {task.id}: {task.description}\nStatus: {status}")
+
+        self.note_text.delete("1.0", tk.END)
+        self.note_text.insert(tk.END, task.note)
+        self.save_note_button.config(state=tk.NORMAL)
+        self._show_detail_panel()
+
+    def _save_note_from_ui(self):
+        if self.selected_task_id is None:
+            messagebox.showwarning("Selection required", "First choose a task with Details.")
+            return
+
+        note = self.note_text.get("1.0", tk.END).strip()
+        saved = self.task_list.save_note(self.selected_task_id, note)
+
+        if not saved:
+            messagebox.showinfo("Not found", "There is no task with that ID.")
+            return
+
+        self._refresh_screen()
+        self._hide_detail_panel()
+        self.selected_task_id = None
+        self._clear_detail_panel()
+        messagebox.showinfo("Saved", "Note saved correctly.")
+
+    def _clear_task_visual_list(self):
+        for widget in self.tasks_container.winfo_children():
+            widget.destroy()
+
+    def _draw_tasks(self):
+        self._clear_task_visual_list()
+
+        current = self.task_list.head
+
+        if current is None:
+            empty_label = tk.Label(self.tasks_container, text="No tasks created.", fg="#4b5563")
+            empty_label.pack(pady=12)
+            return
+
+        while current is not None:
+            status = "Completed" if current.completed else "Pending"
+            status_color = "#047857" if current.completed else "#1d4ed8"
+
+            row = tk.Frame(self.tasks_container, bd=1, relief=tk.SOLID, padx=8, pady=8)
+            row.pack(fill=tk.X, padx=8, pady=5)
+
+            title_label = tk.Label(
+                row,
+                text=f"ID {current.id} | {current.description}",
+                font=("Arial", 10, "bold"),
+                anchor="w",
+            )
+            title_label.grid(row=0, column=0, sticky="w")
+
+            status_label = tk.Label(row, text=status, fg=status_color, font=("Arial", 9, "bold"))
+            status_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+            details_button = tk.Button(
+                row,
+                text="Detalles",
+                command=lambda task_id=current.id: self._open_detail_panel(task_id),
+                width=10,
+                bg="#2563eb",
+                fg="white",
+            )
+            details_button.grid(row=0, column=1, padx=5)
+
+            complete_button = tk.Button(
+                row,
+                text="Complete",
+                command=lambda task_id=current.id: self._mark_task_from_ui(task_id),
+                width=10,
+                bg="#0f766e",
+                fg="white",
+            )
+            if current.completed:
+                complete_button.config(state=tk.DISABLED)
+            complete_button.grid(row=1, column=1, padx=5, pady=(4, 0))
+
+            current = current.next
+
+    def _refresh_screen(self):
+        self.total_label.config(text=f"Total tasks: {self.task_list.size}")
+        self._draw_tasks()
+
+        if self.selected_task_id is not None and self.is_detail_panel_visible:
+            task = self.task_list.find_task(self.selected_task_id)
+            if task is not None:
+                status = "Completed" if task.completed else "Pending"
+                self.current_task_label.config(text=f"ID {task.id}: {task.description}\nStatus: {status}")
+                self.note_text.delete("1.0", tk.END)
+                self.note_text.insert(tk.END, task.note)
 
 
 def main():
     root = tk.Tk()
-    app = AppTareasTkinter(root)
+    app = TaskAppTkinter(root)
     root.mainloop()
 
 

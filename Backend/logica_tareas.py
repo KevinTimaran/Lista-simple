@@ -1,53 +1,73 @@
-class NodoTarea:
-    def __init__(self, identificador, descripcion):
-        self.id = identificador
-        self.descripcion = descripcion
-        self.completada = False
-        self.siguiente = None
+class TaskNode:
+    def __init__(self, task_id, description):
+        self.id = task_id
+        self.description = description
+        self.completed = False
+        self.note = ""
+        self.next = None
 
 
-class ListaEnlazadaTareas:
+class TaskLinkedList:
     def __init__(self):
-        self.cabeza = None
-        self.cola = None
-        self.tamano = 0
-        self._id_actual = 1
+        self.head = None
+        self.tail = None
+        self.size = 0
+        self._current_id = 1
 
-    def agregar_tarea(self, descripcion):
-        nueva_tarea = NodoTarea(self._id_actual, descripcion)
-        self._id_actual += 1
+    def add_task(self, description):
+        new_task = TaskNode(self._current_id, description)
+        self._current_id += 1
 
-        if self.cabeza is None:
-            self.cabeza = nueva_tarea
-            self.cola = nueva_tarea
+        if self.head is None:
+            self.head = new_task
+            self.tail = new_task
         else:
-            self.cola.siguiente = nueva_tarea
-            self.cola = nueva_tarea
+            self.tail.next = new_task
+            self.tail = new_task
 
-        self.tamano += 1
-        return nueva_tarea
+        self.size += 1
+        return new_task
 
-    def marcar_completada(self, identificador):
-        actual = self.cabeza
+    def mark_completed(self, task_id):
+        current = self.head
 
-        while actual is not None:
-            if actual.id == identificador:
-                actual.completada = True
+        while current is not None:
+            if current.id == task_id:
+                current.completed = True
                 return True
-            actual = actual.siguiente
+            current = current.next
 
         return False
 
-    def construir_texto_tareas(self):
-        if self.cabeza is None:
-            return "No hay tareas en la lista."
+    def find_task(self, task_id):
+        current = self.head
 
-        actual = self.cabeza
-        salida = ""
+        while current is not None:
+            if current.id == task_id:
+                return current
+            current = current.next
 
-        while actual is not None:
-            estado = "Completada" if actual.completada else "Pendiente"
-            salida += f"ID: {actual.id} | {actual.descripcion} | Estado: {estado}\n"
-            actual = actual.siguiente
+        return None
 
-        return salida
+    def save_note(self, task_id, note):
+        task = self.find_task(task_id)
+
+        if task is None:
+            return False
+
+        task.note = note
+        return True
+
+    def build_tasks_text(self):
+        if self.head is None:
+            return "No tasks in the list."
+
+        current = self.head
+        output = ""
+
+        while current is not None:
+            status = "Completed" if current.completed else "Pending"
+            output += f"ID: {current.id} | {current.description} | Status: {status}\n"
+            current = current.next
+
+        return output
