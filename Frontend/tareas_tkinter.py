@@ -75,6 +75,25 @@ class TaskAppTkinter:
         self.tasks_canvas.create_window((0, 0), window=self.tasks_container, anchor="nw")
         self.tasks_canvas.configure(yscrollcommand=self.tasks_scrollbar.set)
 
+        self.tasks_container.grid_columnconfigure(0, weight=1)
+        self.tasks_container.grid_columnconfigure(1, weight=0)
+        self.tasks_container.grid_columnconfigure(2, weight=1)
+
+        self.pending_column = tk.Frame(self.tasks_container, bd=1, relief=tk.GROOVE, padx=6, pady=6)
+        self.pending_column.grid(row=0, column=0, sticky="nsew", padx=(6, 3), pady=6)
+        tk.Label(self.pending_column, text="Pending", font=("Arial", 10, "bold"), fg="#1d4ed8").pack(pady=(0, 6))
+        self.pending_list_frame = tk.Frame(self.pending_column)
+        self.pending_list_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.fixed_split_line = tk.Frame(self.tasks_container, width=2, bg="#9ca3af")
+        self.fixed_split_line.grid(row=0, column=1, sticky="ns", pady=8)
+
+        self.completed_column = tk.Frame(self.tasks_container, bd=1, relief=tk.GROOVE, padx=6, pady=6)
+        self.completed_column.grid(row=0, column=2, sticky="nsew", padx=(3, 6), pady=6)
+        tk.Label(self.completed_column, text="Completed", font=("Arial", 10, "bold"), fg="#047857").pack(pady=(0, 6))
+        self.completed_list_frame = tk.Frame(self.completed_column)
+        self.completed_list_frame.pack(fill=tk.BOTH, expand=True)
+
         self.tasks_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0), pady=(0, 8))
         self.tasks_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 8), pady=(0, 8))
 
@@ -213,25 +232,39 @@ class TaskAppTkinter:
         messagebox.showinfo("Saved", "Note saved correctly.")
 
     def _clear_task_visual_list(self):
-        for widget in self.tasks_container.winfo_children():
+        for widget in self.pending_list_frame.winfo_children():
+            widget.destroy()
+
+        for widget in self.completed_list_frame.winfo_children():
             widget.destroy()
 
     def _draw_tasks(self):
         self._clear_task_visual_list()
 
         current = self.task_list.head
+        pending_count = 0
+        completed_count = 0
 
         if current is None:
-            empty_label = tk.Label(self.tasks_container, text="No tasks created.", fg="#4b5563")
+            empty_label = tk.Label(self.pending_list_frame, text="No tasks created.", fg="#4b5563")
             empty_label.pack(pady=12)
+
+            empty_completed_label = tk.Label(self.completed_list_frame, text="No completed tasks.", fg="#4b5563")
+            empty_completed_label.pack(pady=12)
             return
 
         while current is not None:
             status = "Completed" if current.completed else "Pending"
             status_color = "#047857" if current.completed else "#1d4ed8"
 
-            row = tk.Frame(self.tasks_container, bd=1, relief=tk.SOLID, padx=8, pady=8)
+            target_frame = self.completed_list_frame if current.completed else self.pending_list_frame
+            row = tk.Frame(target_frame, bd=1, relief=tk.SOLID, padx=8, pady=8)
             row.pack(fill=tk.X, padx=8, pady=5)
+
+            if current.completed:
+                completed_count += 1
+            else:
+                pending_count += 1
 
             title_label = tk.Label(
                 row,
@@ -246,7 +279,7 @@ class TaskAppTkinter:
 
             details_button = tk.Button(
                 row,
-                text="Detalles",
+                text="Details",
                 command=lambda task_id=current.id: self._open_detail_panel(task_id),
                 width=10,
                 bg="#2563eb",
@@ -267,6 +300,14 @@ class TaskAppTkinter:
             complete_button.grid(row=1, column=1, padx=5, pady=(4, 0))
 
             current = current.next
+
+        if pending_count == 0:
+            empty_pending_label = tk.Label(self.pending_list_frame, text="No pending tasks.", fg="#4b5563")
+            empty_pending_label.pack(pady=12)
+
+        if completed_count == 0:
+            empty_completed_label = tk.Label(self.completed_list_frame, text="No completed tasks.", fg="#4b5563")
+            empty_completed_label.pack(pady=12)
 
     def _refresh_screen(self):
         self.total_label.config(text=f"Total tasks: {self.task_list.size}")
